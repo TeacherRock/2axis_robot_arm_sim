@@ -1,4 +1,4 @@
-classdef Robot
+classdef Robot <handle
     properties
         axis = 2;
         L = [0.24, 0.24];
@@ -27,21 +27,21 @@ classdef Robot
         
         %% 設置鑑別參數
         % 輸入 : 鑑別參數
-        % 輸出 : robot object
-        function obj = setTheta(obj, theta)
-            obj.Theta = theta;
+        % 輸出 : 更改變數
+        function setTheta(this, theta)
+            this.Theta = theta;
         end
         
         %% 設置軌跡型態 
         % 輸入 : 1.控制點或參數 2.軌跡生成型態
-        % 輸出 : robot object
-        function obj = setTtype(obj, input, type)
-            obj.Ttype = type;
+        % 輸出 : 更改變數
+        function setTtype(this, input, type)
+            this.Ttype = type;
             switch type
                 case 'CtrlP'
-                   obj.CtrlP = input;
+                   this.CtrlP = input;
                 case 'Fourier'
-                    obj.F_par = input;
+                   this.F_par = input;
             end
         end
         
@@ -50,15 +50,14 @@ classdef Robot
         % 輸出 : struct P,V,A (角度,角速度,角加速度命令)
         function Output = Trajectory(this)
             switch this.Ttype
-                %控制點做軌跡
+                % 控制點做軌跡
                 case 'CtrlP' 
-                    CtrlPnum = length(this.CtrlP(:, 1));        %控制點數量
+                    CtrlPnum = length(this.CtrlP(:, 1));  % 控制點數量
                     [rec.P, rec.V, rec.A] = deal([]);
                     for i = 1 : CtrlPnum - 1
-                        %控制點的時間
+                        % 控制點的時間
                         t0 = this.CtrlP(i, 1);  t1 = this.CtrlP(i+1, 1);
-                        Des = [];
-                        %串接各軸的位置、速度、加速度
+                        % 串接各軸的位置、速度、加速度
                         for j = 1 : this.axis
                             Des = [Des; 
                                    this.CtrlP(i, (j - 1)*3 + 2), this.CtrlP(i+1, (j - 1)*3 + 2), ...
@@ -66,15 +65,15 @@ classdef Robot
                                    this.CtrlP(i, (j - 1)*3 + 4), this.CtrlP(i+1, (j - 1)*3 + 4)];
                         end
 
-                        %時間
+                        % 時間 (五階多項式)
                         Tcom = [t0^5, t1^5, 5*t0^4, 5*t1^4, 20*t0^3, 20*t1^3; ...
                                 t0^4, t1^4, 4*t0^3, 4*t1^3, 12*t0^2, 12*t1^2; ...
                                 t0^3, t1^3, 3*t0^2, 3*t1^2, 6*t0,    6*t1; ...
                                 t0^2, t1^2, 2*t0,   2*t1,   2,       2; ...
                                 t0,   t1,   1,      1,      0,       0; ...
                                 1,    1,    0,      0,      0,       0;];
-                        %多項式係數
-                        coef = Des*inv(Tcom);
+                        % 多項式係數
+                        coef = Des/Tcom;
 
                         for t = t0 : this.sampT : t1 - this.sampT
                             rec.P = [rec.P; (coef*[t^5;     t^4;     t^3;    t^2;  t;  1])'];
@@ -111,14 +110,11 @@ classdef Robot
                         rec.A(r, :) = [a1, a2];
                         r = r + 1;
                     end
-                    Output = rec;
-                    
-            end
-            
-                
+                    Output = rec; 
+            end   
         end
         
-        %% 順項運動學 角度推位置
+        %% 順向運動學 角度推位置
         % 輸入 : 角度
         % 輸出 : 位置
         function Output = Direc_Kinematics(this, P)
@@ -135,10 +131,13 @@ classdef Robot
                 ./  (2*this.L(1)*this.L(2)) );
             Theta1 = atan( ((this.L(1) + this.L(2).*cos(Theta2)).*P(:,2) - this.L(2).*sin(Theta2).*P(:,1))...
                 ./   ((this.L(1) + this.L(2).*cos(Theta2)).*P(:,1) + this.L(2).*sin(Theta2).*P(:,2)) );
+             
+            dTheta = derivate([Theta1, Theta2], 1, this.sampT, this.axis);
             ddTheta = derivate([Theta1, Theta2], 2, this.sampT, this.axis);
-            rec.P = ddTheta(:, 1:this.axis);
-            rec.V = ddTheta(:, this.axis+1:2*this.axis);
-            rec.A = ddTheta(:, 2*this.axis+1:3*this.axis);
+            
+            rec.P = [Theta1, Theta2];
+            rec.V = dTheta;
+            rec.A = ddTheta;
             Output = rec;
         end
         
@@ -242,25 +241,6 @@ classdef Robot
             
         end
         
-        %% 適應性函數 (未完成)
-        function fitness = Optimization(this)
-            %還原正歸化
-%             x_re = x .* (this.UB - this.LB) + this.LB;
-            Command = this.Trajectory(this.Ttype);
-            [sim, Stable] = this.Simulation(Command);
-            sim = sim.P(:, 1 : this.axis);
-            P_sim = this.Direc_Kinematics(sim);
-            des = this.Trajectory(CP);
-            P_des = des(:, 1 : this.axis);
-            
-            if Stable
-                fitness = sum(sqrt((P_sim(:, 1) - P_des(:, 1)) .^2 + (P_sim(:, 2) - P_des(:, 2)) .^2)); 
-            else
-                fitness = Inf;
-            end
-            
-        end
-        
        %% 慣量矩陣 scara 
        function Output = H_Full(this, P)
            H = [this.Theta(1) + this.Theta(2) + 2*this.L(1)*(this.Theta(3)*cos(P(2)) - this.Theta(4)*sin(P(2))), ...
@@ -279,62 +259,60 @@ classdef Robot
        end
 
        %% 測試 鑑別參數
-      function Output = par_test(this)
-            Command = this.Trajectory();
-            P = [Command.P(1, 1); Command.P(1, 2)];
-            [V, A] = deal(zeros(this.axis,1));
+       function Output = par_test(this)
+           Command = this.Trajectory();
+           P = [Command.P(1, 1); Command.P(1, 2)];
+           [V, A] = deal(zeros(this.axis,1));
             
-            PCmd = [Command.P(:, 1)'; Command.P(:, 2)'];
-            VCmd = [Command.V(:, 1)'; Command.V(:, 2)'];
-            ACmd = [Command.A(:, 1)'; Command.A(:, 2)'];
-            T = this.sampT : this.sampT : length(Command.P(:, 1))*this.sampT;
-            nc = length(T);
+           PCmd = [Command.P(:, 1)'; Command.P(:, 2)'];
+           VCmd = [Command.V(:, 1)'; Command.V(:, 2)'];
+           ACmd = [Command.A(:, 1)'; Command.A(:, 2)'];
+           T = this.sampT : this.sampT : length(Command.P(:, 1))*this.sampT;
+           nc = length(T);
+          [rec.P, rec.V, rec.A, rec.T, rec.F] = deal(zeros(nc ,this.axis));
             
-            [rec.P, rec.V, rec.A, rec.T, rec.F] = deal(zeros(nc ,this.axis));
-             
-            i = 2; Stable = true;
-            while (i < nc+2)
-                % H, GAM
-                H = this.H_Full(P);
-                GAM = this.GAM_Full(P, V);
+           i = 2; Stable = true;
+           while (i < nc+2)
+               % H, GAM
+               H = this.H_Full(P);
+               GAM = this.GAM_Full(P, V);
+               
+               ControllerTorque = this.controller.Torque(PCmd(:, i-1), P, ...
+                                                    VCmd(:, i-1), V, ...
+                                                    ACmd(:, i-1), H, GAM);      
+               % Calculate Friction
+               F = 0;
+               
+               % Calculate A || DDM Diret Dynamic Model
+               A = H \ (ControllerTorque - GAM );                
                 
-                ControllerTorque = this.controller.Torque(PCmd(:, i-1), P, ...
-                                                     VCmd(:, i-1), V, ...
-                                                     ACmd(:, i-1), H, GAM);      
-                % Calculate Friction
-                F = 0;
+               % Integral V, P
+               V = V + A * this.sampT;
+               P = P + V * this.sampT;
                 
-                % Calculate A || DDM Diret Dynamic Model
-                A = H \ (ControllerTorque - GAM );
+               % record
+               rec.P(i-1, :) = P';
+               rec.V(i-1, :) = V';
+               rec.A(i-1, :) = A';
+               rec.T(i-1, :) = ControllerTorque';
+               rec.F(i-1, :) = F';
                 
-                % Integral V, P
-                V = V + A * this.sampT;
-                P = P + V * this.sampT;
-                
-                % record
-                rec.P(i-1, :) = P';
-                rec.V(i-1, :) = V';
-                rec.A(i-1, :) = A';
-                rec.T(i-1, :) = ControllerTorque';
-                rec.F(i-1, :) = F';
-                
-                if sum(isinf(A)) > 0
-                    Stable = false;
-                    break
-                end
-                i = i + 1;  
-            end
-            sim = rec.P(:, 1 : this.axis);
-            P_sim = this.Direc_Kinematics(sim);
-            des = this.Trajectory();
-            P_des = this.Direc_Kinematics(des.P);
-            
-            if Stable
-                Output = sqrt((P_sim(:, 1) - P_des(:, 1)) .^2 + (P_sim(:, 2) - P_des(:, 2)) .^2);
-            else
-                Output = Inf;
-            end
-            
+               if sum(isinf(A)) > 0
+                   Stable = false;
+                   break
+               end
+               i = i + 1;  
+           end
+           sim = rec.P(:, 1 : this.axis);
+           P_sim = this.Direc_Kinematics(sim);
+           des = this.Trajectory();
+           P_des = this.Direc_Kinematics(des.P);
+           
+           if Stable
+               Output = sqrt((P_sim(:, 1) - P_des(:, 1)) .^2 + (P_sim(:, 2) - P_des(:, 2)) .^2);
+           else
+               Output = Inf;
+           end           
         end
     end
 end
