@@ -57,6 +57,7 @@ classdef Robot <handle
                     for i = 1 : CtrlPnum - 1
                         % 控制點的時間
                         t0 = this.CtrlP(i, 1);  t1 = this.CtrlP(i+1, 1);
+                        Des = [];
                         % 串接各軸的位置、速度、加速度
                         for j = 1 : this.axis
                             Des = [Des; 

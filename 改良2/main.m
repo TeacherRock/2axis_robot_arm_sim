@@ -64,16 +64,16 @@ robot1 = Robot();
 robot2 = Robot();
 robot3 = Robot();
 
-% robot = setTtype(robot, X, 'Fourier');
-robot1 = setTtype(robot1, CP, 'CtrlP');
-robot2 = setTtype(robot2, CP, 'CtrlP');
-robot3 = setTtype(robot3, CP, 'CtrlP');
+% robot = setTtype(X, 'Fourier');
+robot1.setTtype(CP, 'CtrlP');
+robot2.setTtype(CP, 'CtrlP');
+robot3.setTtype(CP, 'CtrlP');
 
 % robot = setTheta(robot, theta);
 % robot = setController(robot, 'CTC_id');
-robot1 = setController(robot1, 'Linear');
-robot2 = setController(robot2, 'CTC');
-robot3 = setController(robot3, 'DFF');
+robot1.setController('Linear');
+robot2.setController('CTC');
+robot3.setController('DFF');
 t = tc : tc : 10;
 % Error = robot.par_test();
 Error1 = robot1.PosError();
